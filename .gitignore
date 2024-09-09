@@ -1,0 +1,17 @@
+.vscode/
+.idea/
+
+*.exe
+*.dll
+*.so
+
+*.log
+
+.env
+
+main
+
+*.test
+*.gen.go
+
+vendor/
