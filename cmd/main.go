@@ -2,6 +2,7 @@ package main
 
 import (
     "database/sql"
+    "fmt"
     "log"
     "net/http"
     "tender-service/internal/database"
@@ -10,35 +11,47 @@ import (
     "tender-service/internal/service"
     "tender-service/pkg/config"
     "tender-service/pkg/logger"
-	"github.com/joho/godotenv"
 
+    "github.com/joho/godotenv"
     _ "github.com/lib/pq"
 )
 
 func main() {
     logger.Init()
 
-	err := godotenv.Load()
+    err := godotenv.Load()
     if err != nil {
         logger.Error.Fatalf("Error loading .env file")
     }
 
     cfg := config.LoadConfig()
 
-    db, err := sql.Open("postgres", cfg.PostgresConn)
+    connStr := fmt.Sprintf("user=%s password=%s host=%s dbname=%s sslmode=disable",
+        cfg.PostgresUsername, cfg.PostgresPassword, cfg.PostgresHost, cfg.PostgresDatabase)
+    
+    fmt.Println("Connecting to database with:", connStr)
+
+    db, err := sql.Open("postgres", connStr)
     if err != nil {
         logger.Error.Fatalf("Unable to connect to the database: %v\n", err)
+    }
+    defer db.Close()
+
+    err = db.Ping()
+    if err != nil {
+        logger.Error.Fatalf("Unable to ping the database: %v\n", err)
     }
 
     database.InitDB(db)
 
     tenderRepo := repository.NewTenderRepository(db)
     tenderService := service.NewTenderService(tenderRepo)
+    tenderHandler := handler.NewTenderHandler(tenderService)
 
     http.HandleFunc("/api/ping", handler.PingHandler)
-    http.HandleFunc("/api/tenders/new", handler.CreateTenderHandler(tenderService))
-    http.HandleFunc("/api/tenders", handler.ListTendersHandler(tenderService))
-
+    http.HandleFunc("/api/tenders/new", tenderHandler.CreateTenderHandler)
+    http.HandleFunc("/api/tenders", tenderHandler.GetTenderHandler)
+    
     logger.Info.Printf("Starting server at %s\n", cfg.ServerAddress)
     log.Fatal(http.ListenAndServe(cfg.ServerAddress, nil))
 }
